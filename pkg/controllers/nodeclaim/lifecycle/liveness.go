@@ -70,7 +70,7 @@ func (l *Liveness) Reconcile(ctx context.Context, nodeClaim *v1.NodeClaim) (reco
 	}
 	log.FromContext(ctx).V(1).WithValues("ttl", registrationTTL).Info("terminating due to registration ttl")
 	metrics.NodeClaimsDisruptedTotal.Inc(map[string]string{
-		metrics.ReasonLabel:       "liveness",
+		metrics.ReasonLabel:       "ttl_liveness",
 		metrics.NodePoolLabel:     nodeClaim.Labels[v1.NodePoolLabelKey],
 		metrics.CapacityTypeLabel: nodeClaim.Labels[v1.CapacityTypeLabelKey],
 	})
