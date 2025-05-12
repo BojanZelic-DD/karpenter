@@ -51,7 +51,15 @@ func (l *Liveness) Reconcile(ctx context.Context, nodeClaim *v1.NodeClaim) (reco
 	if ttl := registrationTTL - l.clock.Since(registered.LastTransitionTime.Time); ttl > 0 {
 		return reconcile.Result{RequeueAfter: ttl}, nil
 	}
-	// Delete the NodeClaim if we believe the NodeClaim won't register since we haven't seen the node
+	// Remove finalizers before deleting the NodeClaim to ensure it can be deleted immediately
+	if len(nodeClaim.Finalizers) > 0 {
+		nodeClaim.Finalizers = nil
+		if err := l.kubeClient.Update(ctx, nodeClaim); err != nil {
+			return reconcile.Result{}, client.IgnoreNotFound(err)
+		}
+		log.FromContext(ctx).V(1).Info("removed finalizers from NodeClaim that failed to register")
+	}
+	// Delete the NodeClaim
 	if err := l.kubeClient.Delete(ctx, nodeClaim); err != nil {
 		return reconcile.Result{}, client.IgnoreNotFound(err)
 	}
