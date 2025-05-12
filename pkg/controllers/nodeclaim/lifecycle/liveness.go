@@ -18,10 +18,13 @@ package lifecycle
 
 import (
 	"context"
+	"fmt"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/utils/clock"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -52,13 +55,15 @@ func (l *Liveness) Reconcile(ctx context.Context, nodeClaim *v1.NodeClaim) (reco
 		return reconcile.Result{RequeueAfter: ttl}, nil
 	}
 	// Remove finalizers before deleting the NodeClaim to ensure it can be deleted immediately
-	if len(nodeClaim.Finalizers) > 0 {
-		nodeClaim.Finalizers = nil
-		if err := l.kubeClient.Update(ctx, nodeClaim); err != nil {
-			return reconcile.Result{}, client.IgnoreNotFound(err)
+	stored := nodeClaim.DeepCopy()
+	controllerutil.RemoveFinalizer(nodeClaim, v1.TerminationFinalizer)
+
+	if !equality.Semantic.DeepEqual(stored, nodeClaim) {
+		if err := l.kubeClient.Patch(ctx, nodeClaim, client.StrategicMergeFrom(stored)); err != nil {
+			return reconcile.Result{}, client.IgnoreNotFound(fmt.Errorf("removing finalizer, %w", err))
 		}
-		log.FromContext(ctx).V(1).Info("removed finalizers from NodeClaim that failed to register")
 	}
+
 	// Delete the NodeClaim
 	if err := l.kubeClient.Delete(ctx, nodeClaim); err != nil {
 		return reconcile.Result{}, client.IgnoreNotFound(err)
